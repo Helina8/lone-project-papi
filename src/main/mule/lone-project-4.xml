@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	
+	<flow name="gatherDataFromExternalApi" doc:id="6f2a0240-0670-4c3b-b009-6eb8f49fa648" >
+		<http:listener doc:name="Listener" doc:id="d69d6dea-ad5a-432e-af4e-ee6c839c3bb5" config-ref="HTTP_Listener_config" path="/project1/zipcode/{zip}" allowedMethods="get"/>
+		<logger level="INFO" doc:name="Logger" doc:id="e7e4a7cf-33c5-442f-b2a6-dee0508ebb5a" message="starting&gt;&gt;&gt;&gt;&gt;&gt;#[attributes.queryString]"/>
+		<set-variable value="#[attributes.queryString]" doc:name="Set Variable" doc:id="1f4acb82-efd9-492e-8ebf-1000126f3018" variableName="consumedParameter"/>
+		<ee:transform doc:name="Transform Message" doc:id="3735aa4a-bbb0-4942-9bac-83d601e74b51" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+import substringBy from dw::core::Strings
+var inputString = vars.consumedParameter
+var inputPara=(inputString substringBy  $ == "=") 
+---
+
+{
+    zip:attributes.uriParams.zip,
+     key:inputPara[1]
+
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<first-successful doc:name="First Successful" doc:id="dcdae369-c69a-4a92-8fe4-69c0b3b7d4b3" >
+			<route >
+				<until-successful maxRetries="3" doc:name="Until Successful" doc:id="0728202c-79f0-4cb4-8170-cacc3a6077c0" millisBetweenRetries="5000">
+					<http:request method="GET" doc:name="Request" doc:id="0d7227c8-d767-4652-b563-e1aea22aaca7" config-ref="HTTP_Request_configuration" path="/GetZipCodeDetails/{zip}">
+			<http:uri-params><![CDATA[#[output application/json
+---
+{
+	"zip" :payload.zip
+}]]]></http:uri-params>
+			<http:query-params><![CDATA[#[output application/json
+---
+{
+	"Key" : payload.key
+}]]]></http:query-params>
+		</http:request>
+				</until-successful>
+				<set-variable value="#[error.cause]" doc:name="Set Variable" doc:id="73772552-e362-4dae-9eb9-9041b6f15a5a" variableName="request_error"/>
+			</route>
+			<route >
+				<set-payload value="#[vars.consumedParameter]" doc:name="Set Payload" doc:id="953090d4-4eda-4f50-8f7b-a5c089a08485" />
+				<logger level="INFO" doc:name="Logger" doc:id="5afc56ab-68bc-4b6e-b076-b3bbb5c0764f" message="#[payload]"/>
+			</route>
+		</first-successful>
+		<logger level="INFO" doc:name="Logger" doc:id="8973d371-a531-4504-952a-80fdc4305bdf" message="#[vars.request_error]"/>
+		<logger level="INFO" doc:name="Logger" doc:id="1c779d17-1cd6-45fa-bf25-04e367a1f72c" message="Done"/>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="8cb0a90b-d4a8-4d53-b79b-53218bcf06cf"/>
+		</error-handler>
+	</flow>
+</mule>
